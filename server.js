@@ -18,6 +18,20 @@ import { QUESTIONS } from "./questions.js";
 import { REFERENCE } from "./reference.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Carga .env (formato KEY=VALUE por línea, # para comentarios) sin dependencias.
+try {
+  const envText = fs.readFileSync(path.join(__dirname, ".env"), "utf8");
+  for (const line of envText.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/i);
+    if (!m) continue;
+    const k = m[1];
+    let v = m[2];
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if (process.env[k] == null) process.env[k] = v;
+  }
+} catch {}
+
 const PORT = Number(process.env.PORT || 3000);
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
@@ -42,6 +56,8 @@ const httpServer = http.createServer((req, res) => {
 });
 
 /* ---------- Estado partida ---------- */
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 4;
 const game = {
   phase: "lobby",       // lobby | answer | eval | end
   players: [],          // [{id, name, ws, score, connected}]
@@ -54,8 +70,8 @@ const game = {
   currentMods: null,
   questionPool: [],
   submissions: {},      // { playerId: text }
-  evalResult: null,     // { p0:{covered,missed,comment}, p1:{...}, source }
-  proposedScores: [0, 0],
+  evalResult: null,     // { players: [{score, comment}, ...], source }
+  proposedScores: [],   // longitud = players.length
   evaluating: false,
 };
 
@@ -124,18 +140,37 @@ function normalize(s) {
 
 function evalLocalOne(text, concepts) {
   const norm = normalize(text);
-  let hits = 0;
+  const covered = [];
+  const missed = [];
   for (const c of concepts) {
+    let hit = false;
     for (const s of c.syn) {
-      if (norm.includes(normalize(s))) { hits++; break; }
+      if (norm.includes(normalize(s))) { hit = true; break; }
     }
+    (hit ? covered : missed).push(c.label);
   }
   const total = concepts.length || 1;
-  const score = Math.round((hits / total) * 100);
-  return { comment: "", score };
+  const score = Math.round((covered.length / total) * 100);
+  if (!norm) {
+    return { score: 0, comment: "⚠️ Lo que falta o está mal:\nNo se ha recibido respuesta.\n\n💡 Cómo mejorar:\nEscribe al menos las ideas principales del concepto." };
+  }
+  const parts = [];
+  if (covered.length) parts.push("✅ Lo que está bien:\n• " + covered.join("\n• "));
+  else parts.push("✅ Lo que está bien:\nNo se han detectado conceptos clave de la respuesta modelo.");
+  if (missed.length) parts.push("⚠️ Lo que falta o está mal:\n• " + missed.join("\n• "));
+  else parts.push("⚠️ Lo que falta o está mal:\nNada relevante: has cubierto todos los conceptos detectables.");
+  parts.push("💡 Cómo mejorar:\n" + (missed.length
+    ? "Incluye explícitamente los puntos marcados arriba y desarróllalos con tus palabras."
+    : "Profundiza con un ejemplo concreto para reforzar la respuesta."));
+  parts.push("(Evaluación local por coincidencia de sinónimos · sin LLM)");
+  return { score, comment: parts.join("\n\n") };
 }
 
-function buildBothEvalPrompts(textA, textB, question, nameA, nameB) {
+function buildEvalPrompts(entries, question) {
+  // entries: [{text, name}, ...]
+  const playerBlocks = entries.map((e, i) => `RESPUESTA DEL JUGADOR ${i} (${e.name}):
+"""${e.text || "(sin respuesta)"}"""`).join("\n\n");
+  const jsonShape = entries.map((_, i) => `"p${i}":{"score":0-100,"comment":"texto con los 3 bloques separados por saltos de línea"}`).join(",");
   const sys = `Eres un profesor experto que corrige exámenes universitarios de "Negocio y Modelos Digitales". Tienes el PDF de referencia con las respuestas oficiales.
 
 Tu trabajo: para CADA estudiante asigna una puntuación holística de 0 a 100 y redacta un comentario detallado en español, tipo feedback de profesor.
@@ -159,8 +194,8 @@ FORMATO DEL COMENTARIO (estructurado, 3-6 frases en total):
 
 Si la respuesta está vacía o es incoherente, di brevemente que no se puede evaluar y da 0.
 
-Responde SOLO con JSON válido, sin texto adicional, formato exacto:
-{"p0":{"score":0-100,"comment":"texto con los 3 bloques separados por saltos de línea"},"p1":{"score":0-100,"comment":"texto con los 3 bloques separados por saltos de línea"}}
+Responde SOLO con JSON válido, sin texto adicional, con UNA clave por jugador (p0, p1, ...), formato exacto:
+{${jsonShape}}
 
 Los saltos de línea en el comentario van como \\n dentro del string JSON.
 
@@ -171,49 +206,46 @@ ${REFERENCE}
   const usr = `PREGUNTA:
 ${question.q}
 
-RESPUESTA DEL JUGADOR 0 (${nameA}):
-"""${textA || "(sin respuesta)"}"""
-
-RESPUESTA DEL JUGADOR 1 (${nameB}):
-"""${textB || "(sin respuesta)"}"""
+${playerBlocks}
 
 Evalúa cada respuesta de forma independiente. Para cada una: nota 0-100 + comentario estructurado con "✅ Lo que está bien", "⚠️ Lo que falta o está mal" y "💡 Cómo mejorar".`;
   return { sys, usr };
 }
 
-function parseBothEvalJson(raw, question, source) {
+function parseEvalJson(raw, n, source) {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   let parsed;
   try { parsed = JSON.parse(m[0]); } catch { return null; }
-  if (!parsed.p0 || !parsed.p1) return null;
-  const result = { source };
-  for (const k of ["p0", "p1"]) {
-    let score = Number(parsed[k].score);
+  const players = [];
+  for (let i = 0; i < n; i++) {
+    const v = parsed[`p${i}`];
+    if (!v) return null;
+    let score = Number(v.score);
     if (!Number.isFinite(score)) return null;
     score = Math.max(0, Math.min(100, Math.round(score)));
-    result[k] = { comment: parsed[k].comment || "", score };
+    players.push({ score, comment: v.comment || "" });
   }
-  return result;
+  return { source, players };
 }
 
-async function evalBothClaude(textA, textB, question, nameA, nameB) {
-  const { sys, usr } = buildBothEvalPrompts(textA, textB, question, nameA, nameB);
+async function evalClaude(entries, question) {
+  const { sys, usr } = buildEvalPrompts(entries, question);
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 2500, system: sys, messages: [{ role:"user", content: usr }] }),
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 3500, system: sys, messages: [{ role:"user", content: usr }] }),
     });
     if (!res.ok) { console.warn("Claude API err", res.status, await res.text()); return null; }
     const data = await res.json();
     const raw = data.content?.[0]?.text || "";
-    return parseBothEvalJson(raw, question, "claude");
+    return parseEvalJson(raw, entries.length, "claude");
   } catch (e) { console.warn("Claude err", e); return null; }
 }
 
-async function evalBothGemini(textA, textB, question, nameA, nameB) {
-  const { sys, usr } = buildBothEvalPrompts(textA, textB, question, nameA, nameB);
+async function evalGemini(entries, question) {
+  const { sys, usr } = buildEvalPrompts(entries, question);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
   try {
     const res = await fetch(url, {
@@ -222,29 +254,28 @@ async function evalBothGemini(textA, textB, question, nameA, nameB) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: sys }] },
         contents: [{ role: "user", parts: [{ text: usr }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 2500 },
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 3500 },
       }),
     });
     if (!res.ok) { console.warn("Gemini API err", res.status, await res.text()); return null; }
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return parseBothEvalJson(raw, question, "gemini");
+    return parseEvalJson(raw, entries.length, "gemini");
   } catch (e) { console.warn("Gemini err", e); return null; }
 }
 
-async function evaluateBoth(textA, textB, question, nameA, nameB) {
+async function evaluateAll(entries, question) {
   if (ANTHROPIC_KEY) {
-    const r = await evalBothClaude(textA, textB, question, nameA, nameB);
+    const r = await evalClaude(entries, question);
     if (r) return r;
   }
   if (GEMINI_KEY) {
-    const r = await evalBothGemini(textA, textB, question, nameA, nameB);
+    const r = await evalGemini(entries, question);
     if (r) return r;
   }
   return {
-    p0: evalLocalOne(textA, question.concepts),
-    p1: evalLocalOne(textB, question.concepts),
     source: "local",
+    players: entries.map(e => evalLocalOne(e.text, question.concepts)),
   };
 }
 
@@ -266,7 +297,7 @@ function clearRoundTimer() {
 function nextTurn() {
   clearRoundTimer();
   game.evalResult = null;
-  game.proposedScores = [0, 0];
+  game.proposedScores = game.players.map(() => 0);
   game.submissions = {};
   game.evaluating = false;
   if (game.turnIndex >= game.rounds) { game.phase = "end"; broadcast(publicState()); return; }
@@ -291,28 +322,22 @@ function forceTimeoutSubmit() {
 }
 
 function computeProposedScores(question, mods, evalResult) {
-  const s0 = Number(evalResult.p0?.score) || 0;
-  const s1 = Number(evalResult.p1?.score) || 0;
   const mult = mods?.mult || 1;
-  return [
-    Math.round(question.points * (s0 / 100) * mult),
-    Math.round(question.points * (s1 / 100) * mult),
-  ];
+  return evalResult.players.map(p => Math.round(question.points * ((Number(p?.score) || 0) / 100) * mult));
 }
 
 async function maybeEvaluate() {
   if (game.phase !== "answer") return;
   if (game.evaluating) return;
-  // Sólo jugadores conectados al iniciar la ronda cuentan; aquí simple: ambos slots
   const ids = game.players.map(p => p.id);
-  if (ids.length < 2) return;
+  if (ids.length < MIN_PLAYERS) return;
   const allSubmitted = ids.every(id => typeof game.submissions[id] === "string");
   if (!allSubmitted) return;
   game.evaluating = true;
   clearRoundTimer();
   broadcast(publicState());
-  const [p0, p1] = game.players;
-  const r = await evaluateBoth(game.submissions[p0.id], game.submissions[p1.id], game.currentQ, p0.name, p1.name);
+  const entries = game.players.map(p => ({ text: game.submissions[p.id], name: p.name }));
+  const r = await evaluateAll(entries, game.currentQ);
   game.evalResult = r;
   game.proposedScores = computeProposedScores(game.currentQ, game.currentMods, r);
   game.phase = "eval";
@@ -330,8 +355,7 @@ function submitAnswer(playerId, text) {
 
 function confirmScore() {
   if (game.phase !== "eval") return;
-  game.players[0].score += game.proposedScores[0] || 0;
-  game.players[1].score += game.proposedScores[1] || 0;
+  game.players.forEach((p, i) => { p.score += game.proposedScores[i] || 0; });
   game.turnIndex += 1;
   nextTurn();
 }
@@ -349,7 +373,7 @@ function resetGame() {
   game.currentQ = null; game.currentEvent = null; game.currentMods = null;
   game.submissions = {};
   game.evalResult = null;
-  game.proposedScores = [0, 0];
+  game.proposedScores = game.players.map(() => 0);
   broadcast(publicState());
 }
 
@@ -374,12 +398,12 @@ wss.on("connection", (ws) => {
       const reconnect = m.id ? game.players.find(p => p.id === m.id) : null;
       if (reconnect) {
         reconnect.ws = ws; reconnect.name = name; player = reconnect;
-      } else if (game.players.length < 2) {
+      } else if (game.phase === "lobby" && game.players.length < MAX_PLAYERS) {
         player = { id: makeId(), name, ws, score: 0 };
         game.players.push(player);
         if (!game.hostId) game.hostId = player.id;
       } else {
-        ws.send(JSON.stringify({ type:"error", msg:"Partida llena (2 jugadores)" }));
+        ws.send(JSON.stringify({ type:"error", msg: game.phase !== "lobby" ? "Partida ya empezada" : `Partida llena (${MAX_PLAYERS} jugadores)` }));
         return;
       }
       ws.send(JSON.stringify({ type:"welcome", you: player.id, isHost: game.hostId === player.id }));
@@ -389,7 +413,7 @@ wss.on("connection", (ws) => {
 
     if (!player) return;
 
-    if (m.type === "start" && player.id === game.hostId && game.phase === "lobby" && game.players.length === 2) {
+    if (m.type === "start" && player.id === game.hostId && game.phase === "lobby" && game.players.length >= MIN_PLAYERS && game.players.length <= MAX_PLAYERS) {
       const rounds = Math.min(20, Math.max(1, Number(m.rounds) || 5));
       const timeLimit = Math.min(600, Math.max(20, Number(m.timeLimit) || 90));
       startGame(rounds, timeLimit);
