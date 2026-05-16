@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check /home/antonio/Desktop/examen/duelo/server.js)",
+      "Bash(node --check server.js)",
+      "Bash(node --check reference.js)"
+    ]
+  }
+}

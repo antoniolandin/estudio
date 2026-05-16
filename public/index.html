@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Duelo Digital — Negocios Digitales</title>
+<style>
+  :root{
+    --bg1:#0a0118; --bg2:#1a0b3d; --bg3:#2d0a5c;
+    --neon-pink:#ff2d95; --neon-cyan:#00f0ff; --neon-purple:#b829ff;
+    --neon-yellow:#fff200; --neon-green:#39ff14;
+    --p1:#00f0ff; --p2:#ff2d95;
+    --glass:rgba(255,255,255,0.06);
+    --glass-br:rgba(255,255,255,0.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;font-family:'Segoe UI',system-ui,sans-serif;color:#fff}
+  body{
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(184,41,255,0.35), transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(255,45,149,0.3), transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(0,240,255,0.15), transparent 60%),
+      linear-gradient(135deg,var(--bg1),var(--bg2),var(--bg3));
+    background-size:200% 200%;
+    animation:bgshift 18s ease infinite;
+    min-height:100vh;
+  }
+  @keyframes bgshift{0%,100%{background-position:0% 0%}50%{background-position:100% 100%}}
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+  .star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;animation:twinkle 3s ease-in-out infinite}
+  @keyframes twinkle{0%,100%{opacity:.2;transform:scale(1)}50%{opacity:1;transform:scale(1.6)}}
+  .screen{position:relative;z-index:1;min-height:100vh;padding:1.5rem;display:flex;flex-direction:column;align-items:center}
+  .hidden{display:none!important}
+  h1.logo{
+    font-size:clamp(2rem,5vw,4rem);font-weight:900;letter-spacing:.1em;
+    background:linear-gradient(90deg,var(--neon-cyan),var(--neon-pink),var(--neon-purple),var(--neon-cyan));
+    background-size:300% 100%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:gradslide 4s linear infinite;
+    text-align:center;line-height:1;
+  }
+  @keyframes gradslide{to{background-position:300% 0}}
+  .subtitle{margin-top:.5rem;font-size:.9rem;opacity:.7;letter-spacing:.3em;text-transform:uppercase;text-align:center}
+  .badge{display:inline-block;padding:.3rem .8rem;border-radius:20px;font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .badge.ai{background:linear-gradient(135deg,var(--neon-cyan),var(--neon-purple));color:#001}
+  .badge.local{background:rgba(255,255,255,.1);border:1px solid var(--glass-br)}
+  .card{background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--glass-br);border-radius:20px;padding:1.5rem;box-shadow:0 8px 32px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.1)}
+  .btn{border:none;cursor:pointer;font-weight:700;letter-spacing:.05em;padding:.8rem 1.6rem;border-radius:12px;font-size:1rem;transition:transform .15s,filter .15s;color:#fff}
+  .btn:hover{transform:translateY(-2px);filter:brightness(1.15)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none}
+  .btn-primary{background:linear-gradient(135deg,var(--neon-pink),var(--neon-purple));box-shadow:0 8px 24px rgba(184,41,255,.4)}
+  .btn-cyan{background:linear-gradient(135deg,var(--neon-cyan),#0080ff);color:#001;box-shadow:0 8px 24px rgba(0,240,255,.4)}
+  .btn-ghost{background:rgba(255,255,255,.08);border:1px solid var(--glass-br)}
+  input[type=text],input[type=number],select{
+    background:rgba(0,0,0,.3);border:1px solid var(--glass-br);color:#fff;
+    padding:.75rem 1rem;border-radius:10px;font-size:1rem;outline:none;width:100%
+  }
+  input:focus{border-color:var(--neon-cyan);box-shadow:0 0 0 3px rgba(0,240,255,.2)}
+  /* lobby */
+  .lobby-card{margin-top:1.5rem;width:min(90vw,500px)}
+  .player-row{display:flex;align-items:center;gap:.8rem;padding:.8rem;border-radius:12px;background:rgba(255,255,255,.04);margin:.5rem 0}
+  .player-row.p1{box-shadow:0 0 0 1px var(--p1) inset}
+  .player-row.p2{box-shadow:0 0 0 1px var(--p2) inset}
+  .player-row.empty{opacity:.4;border:1px dashed var(--glass-br);background:none}
+  .avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-size:1.3rem;font-weight:900;flex-shrink:0}
+  .p1 .avatar{background:linear-gradient(135deg,var(--neon-cyan),#0080ff);color:#001}
+  .p2 .avatar{background:linear-gradient(135deg,var(--neon-pink),#ff8000);color:#fff}
+  .status-dot{width:10px;height:10px;border-radius:50%;background:var(--neon-green);box-shadow:0 0 10px var(--neon-green)}
+  .status-dot.off{background:#444;box-shadow:none}
+  /* game */
+  .scoreboard{display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;width:100%;max-width:1100px;align-items:center;margin-bottom:1rem}
+  .pcard{padding:.8rem 1.2rem;border-radius:16px;display:flex;align-items:center;gap:.8rem;transition:all .3s}
+  .pcard.p1{background:linear-gradient(135deg,rgba(0,240,255,.15),rgba(0,240,255,.05));border:1px solid rgba(0,240,255,.4)}
+  .pcard.p2{background:linear-gradient(135deg,rgba(255,45,149,.15),rgba(255,45,149,.05));border:1px solid rgba(255,45,149,.4)}
+  .pcard.active{transform:scale(1.05)}
+  .pcard.p1.active{box-shadow:0 0 30px rgba(0,240,255,.6)}
+  .pcard.p2.active{box-shadow:0 0 30px rgba(255,45,149,.6)}
+  .pname{font-size:1rem;font-weight:700}
+  .pscore{font-size:2rem;font-weight:900;font-variant-numeric:tabular-nums}
+  .p1 .pscore{color:var(--neon-cyan);text-shadow:0 0 15px rgba(0,240,255,.6)}
+  .p2 .pscore{color:var(--neon-pink);text-shadow:0 0 15px rgba(255,45,149,.6)}
+  .vs{font-size:1.5rem;font-weight:900;opacity:.5;text-align:center}
+  .you-tag{font-size:.7rem;background:rgba(255,255,255,.15);padding:.1rem .5rem;border-radius:10px;letter-spacing:.1em}
+  .round-info{font-size:.85rem;letter-spacing:.3em;opacity:.7;text-transform:uppercase;margin-bottom:.5rem}
+  .progress{width:100%;max-width:1100px;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:1rem}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-pink));transition:width .5s}
+  .turn-banner{text-align:center;font-size:1.3rem;font-weight:700;margin:.5rem 0 1rem;letter-spacing:.05em}
+  .turn-banner.p1{color:var(--neon-cyan)}
+  .turn-banner.p2{color:var(--neon-pink)}
+  .event-banner{width:100%;max-width:1100px;padding:.8rem 1.2rem;border-radius:14px;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;animation:slidein .5s ease-out;font-weight:700}
+  @keyframes slidein{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .event-icon{font-size:2rem}
+  .ev-doble{background:linear-gradient(90deg,rgba(255,242,0,.25),rgba(255,242,0,.05));border:1px solid var(--neon-yellow);color:var(--neon-yellow)}
+  .ev-robo{background:linear-gradient(90deg,rgba(255,0,64,.25),rgba(255,0,64,.05));border:1px solid #ff0040;color:#ff6080}
+  .ev-escudo{background:linear-gradient(90deg,rgba(57,255,20,.25),rgba(57,255,20,.05));border:1px solid var(--neon-green);color:var(--neon-green)}
+  .ev-duelo{background:linear-gradient(90deg,rgba(184,41,255,.25),rgba(184,41,255,.05));border:1px solid var(--neon-purple);color:#d090ff}
+  .ev-tiempo{background:linear-gradient(90deg,rgba(0,240,255,.25),rgba(0,240,255,.05));border:1px solid var(--neon-cyan);color:var(--neon-cyan)}
+  .ev-misterio{background:linear-gradient(90deg,rgba(255,45,149,.25),rgba(255,45,149,.05));border:1px solid var(--neon-pink);color:#ff90c0}
+  .ev-rapida{background:linear-gradient(90deg,rgba(255,140,0,.25),rgba(255,140,0,.05));border:1px solid #ff8c00;color:#ffaa40}
+  .qcard{width:100%;max-width:1100px;margin-bottom:1rem}
+  .qmeta{display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;font-size:.8rem;opacity:.7;letter-spacing:.1em;text-transform:uppercase}
+  .qpoints{font-size:1.1rem;font-weight:900;color:var(--neon-yellow)}
+  .qtext{font-size:1.25rem;line-height:1.5;font-weight:500}
+  .qunit{display:inline-block;padding:.15rem .7rem;background:var(--neon-purple);border-radius:20px;font-size:.75rem;font-weight:700;margin-right:.4rem}
+  .controls{display:flex;flex-direction:column;align-items:center;gap:.8rem;width:100%;max-width:1100px}
+  .timer{font-size:2.5rem;font-weight:900;font-variant-numeric:tabular-nums}
+  .timer.warn{color:#ff8c00;animation:shake .3s ease infinite}
+  .timer.danger{color:#ff0040;animation:shake .15s ease infinite}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+  .btn-mic{width:100px;height:100px;border-radius:50%;font-size:2rem;background:linear-gradient(135deg,var(--neon-pink),var(--neon-purple));box-shadow:0 0 0 0 rgba(255,45,149,.7)}
+  .btn-mic.rec{animation:pulse 1.2s ease-out infinite;background:linear-gradient(135deg,#ff0040,#ff2d95)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,45,149,.7)}70%{box-shadow:0 0 0 25px rgba(255,45,149,0)}100%{box-shadow:0 0 0 0 rgba(255,45,149,0)}}
+  .transcript{width:100%;min-height:100px;padding:1rem;border-radius:14px;background:rgba(0,0,0,.3);border:1px dashed var(--glass-br);font-size:1rem;line-height:1.5}
+  .transcript:empty::before{content:'Pulsa 🎤 para hablar o escribe abajo...';opacity:.4}
+  .transcript.viewer:empty::before{content:'(El otro jugador está respondiendo)';opacity:.4}
+  .interim{opacity:.5;font-style:italic}
+  .mode-toggle{display:flex;gap:.4rem;background:rgba(0,0,0,.3);padding:.3rem;border-radius:12px;border:1px solid var(--glass-br)}
+  .mode-toggle button{background:transparent;border:none;color:#fff;padding:.5rem 1rem;border-radius:8px;cursor:pointer;font-weight:600;font-size:.85rem;opacity:.6}
+  .mode-toggle button.active{background:linear-gradient(135deg,var(--neon-cyan),var(--neon-purple));color:#001;opacity:1}
+  textarea.answer-box{width:100%;min-height:120px;padding:1rem;border-radius:14px;background:rgba(0,0,0,.3);border:1px solid var(--glass-br);color:#fff;font-size:1rem;line-height:1.5;font-family:inherit;resize:vertical;outline:none}
+  textarea.answer-box:focus{border-color:var(--neon-cyan);box-shadow:0 0 0 3px rgba(0,240,255,.2)}
+  .action-row{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center}
+  /* eval */
+  .eval-card{width:100%;max-width:1100px}
+  .concept-list{display:flex;flex-wrap:wrap;gap:.4rem;margin:.8rem 0}
+  .kw{padding:.35rem .8rem;border-radius:18px;font-size:.85rem;font-weight:600;background:rgba(255,255,255,.08);border:1px solid var(--glass-br);opacity:.5}
+  .kw.hit{background:linear-gradient(135deg,var(--neon-green),#00aa00);color:#001;opacity:1;box-shadow:0 0 12px rgba(57,255,20,.4)}
+  .model-answer{background:rgba(0,0,0,.3);padding:1rem;border-radius:12px;margin:.8rem 0;max-height:280px;overflow:auto;line-height:1.6;border-left:3px solid var(--neon-cyan);font-size:.95rem}
+  .score-adjust{display:flex;align-items:center;gap:.8rem;justify-content:center;margin:.8rem 0}
+  .score-adjust input{width:100px;font-size:1.5rem;text-align:center;font-weight:900}
+  .score-btn{width:44px;height:44px;border-radius:50%;font-size:1.3rem;font-weight:900;background:var(--glass);border:1px solid var(--glass-br);color:#fff;cursor:pointer}
+  .source-tag{display:inline-block;padding:.2rem .6rem;border-radius:10px;font-size:.7rem;font-weight:700;letter-spacing:.1em}
+  .source-tag.claude{background:linear-gradient(135deg,var(--neon-cyan),var(--neon-purple));color:#001}
+  .source-tag.gemini{background:linear-gradient(135deg,#4285f4,#9b72ff);color:#fff}
+  .source-tag.local{background:rgba(255,255,255,.1);border:1px solid var(--glass-br)}
+  /* end */
+  .winner-card{text-align:center;max-width:550px;margin-top:1.5rem}
+  .crown{font-size:4rem;animation:bounce 1s ease infinite alternate}
+  @keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+  .winner-name{font-size:2.5rem;font-weight:900;margin:.8rem 0}
+  .shield{display:inline-block;margin-left:.4rem;font-size:.85rem}
+  .float-score{position:fixed;font-size:3rem;font-weight:900;pointer-events:none;z-index:100;animation:floatup 1.5s ease-out forwards}
+  @keyframes floatup{to{transform:translateY(-140px);opacity:0}}
+  .conn-state{position:fixed;top:.5rem;right:.5rem;font-size:.75rem;padding:.3rem .6rem;border-radius:10px;background:rgba(0,0,0,.4);border:1px solid var(--glass-br);z-index:50}
+  .conn-state.ok{border-color:var(--neon-green);color:var(--neon-green)}
+  .conn-state.bad{border-color:#ff0040;color:#ff0040}
+  @media (max-width:700px){
+    .scoreboard{grid-template-columns:1fr}
+    .vs{display:none}
+    .qtext{font-size:1.05rem}
+    .pscore{font-size:1.7rem}
+  }
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+<div id="connState" class="conn-state bad">Conectando…</div>
+
+<!-- JOIN -->
+<section id="joinScreen" class="screen">
+  <h1 class="logo">DUELO DIGITAL</h1>
+  <p class="subtitle">Negocios y Modelos Digitales</p>
+  <div class="card lobby-card">
+    <h2 style="margin-bottom:1rem;font-size:1.2rem">Tu nombre</h2>
+    <input id="joinName" type="text" placeholder="Antonio / Álvaro" maxlength="20">
+    <button class="btn btn-primary" style="width:100%;margin-top:1rem;font-size:1.1rem;padding:1rem" onclick="doJoin()">ENTRAR ▶</button>
+  </div>
+</section>
+
+<!-- LOBBY -->
+<section id="lobbyScreen" class="screen hidden">
+  <h1 class="logo">SALA DE ESPERA</h1>
+  <p class="subtitle" id="lobbyAi">Eval: —</p>
+  <div class="card lobby-card">
+    <h3 style="margin-bottom:.8rem">Jugadores conectados</h3>
+    <div id="lobbyPlayers"></div>
+    <div id="hostControls" class="hidden" style="margin-top:1.2rem">
+      <label style="display:block;margin-bottom:.4rem;opacity:.7;font-size:.85rem">Rondas por jugador</label>
+      <select id="rounds">
+        <option value="3">3 (corta)</option>
+        <option value="5" selected>5 (estándar)</option>
+        <option value="10">10 (larga)</option>
+        <option value="20">20 (muy larga)</option>
+        <option value="35">35 (todas)</option>
+      </select>
+      <label style="display:block;margin:.8rem 0 .4rem;opacity:.7;font-size:.85rem">Segundos por respuesta</label>
+      <select id="timelimit">
+        <option value="60">60s</option>
+        <option value="90" selected>90s</option>
+        <option value="120">120s</option>
+        <option value="180">180s</option>
+      </select>
+      <button id="startBtn" class="btn btn-primary" style="width:100%;margin-top:1rem;font-size:1.1rem;padding:1rem" onclick="doStart()" disabled>EMPEZAR PARTIDA ▶</button>
+    </div>
+    <p id="waitingMsg" style="margin-top:1rem;text-align:center;opacity:.7;font-size:.9rem"></p>
+  </div>
+</section>
+
+<!-- GAME -->
+<section id="gameScreen" class="screen hidden">
+  <div class="round-info" id="roundInfo">Ronda 1 / 5</div>
+  <div class="progress"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="scoreboard">
+    <div class="pcard p1" id="pcard1">
+      <div class="avatar" id="av1">·</div>
+      <div style="flex:1">
+        <div class="pname"><span id="pname1">—</span> <span id="youtag1" class="you-tag hidden">TÚ</span><span id="shield1" class="shield hidden">🛡️</span></div>
+        <div class="pscore" id="pscore1">0</div>
+      </div>
+    </div>
+    <div class="vs">VS</div>
+    <div class="pcard p2" id="pcard2">
+      <div class="avatar" id="av2">·</div>
+      <div style="flex:1">
+        <div class="pname"><span id="pname2">—</span> <span id="youtag2" class="you-tag hidden">TÚ</span><span id="shield2" class="shield hidden">🛡️</span></div>
+        <div class="pscore" id="pscore2">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="eventBanner" class="event-banner hidden">
+    <span class="event-icon" id="eventIcon">⚡</span>
+    <div>
+      <div id="eventTitle">EVENTO</div>
+      <div id="eventDesc" style="font-weight:400;font-size:.85rem;opacity:.9"></div>
+    </div>
+  </div>
+
+  <div class="turn-banner" id="turnBanner">Ambos responden a la vez</div>
+
+  <div class="card qcard">
+    <div class="qmeta">
+      <div><span class="qunit" id="qunit">U?</span><span id="qid">Pregunta</span></div>
+      <div class="qpoints" id="qpoints">+0 pts</div>
+    </div>
+    <div class="qtext" id="qtext">…</div>
+  </div>
+
+  <div class="controls">
+    <div class="timer" id="timer">—</div>
+    <textarea id="textInput" class="answer-box" placeholder="Escribe tu respuesta aquí... (Ctrl+Enter para enviar)"></textarea>
+    <div class="action-row">
+      <button class="btn btn-ghost hidden" id="skipBtn" onclick="doSkip()">⏭ Saltar (host)</button>
+      <button class="btn btn-primary" id="finishBtn" onclick="doSubmit()">✓ He terminado</button>
+    </div>
+    <div id="rivalStatus" style="text-align:center;opacity:.85;font-size:.9rem"></div>
+  </div>
+</section>
+
+<!-- EVAL -->
+<section id="evalScreen" class="screen hidden">
+  <h2 style="font-size:1.8rem;margin:.5rem 0">📊 Evaluación <span id="evalSrcTag" class="source-tag local">LOCAL</span></h2>
+  <div class="card eval-card">
+    <div style="margin-bottom:.8rem"><strong>Pregunta:</strong><p id="evalQuestion" style="margin-top:.4rem;opacity:.9"></p></div>
+
+    <div id="dualEval" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.8rem">
+      <div class="eval-side" data-side="0" style="padding:1rem;border-radius:14px;background:rgba(0,240,255,.06);border:1px solid rgba(0,240,255,.3)">
+        <div style="font-weight:800;color:var(--p1);margin-bottom:.4rem" id="evName0">—</div>
+        <p id="evAns0" style="background:rgba(0,0,0,.3);padding:.6rem;border-radius:10px;line-height:1.4;min-height:60px;font-size:.92rem"></p>
+        <p id="evCom0" style="opacity:.95;font-size:.92rem;line-height:1.5;margin-top:.6rem;white-space:pre-wrap;background:rgba(0,0,0,.25);padding:.7rem;border-radius:10px"></p>
+        <div class="model-score" style="margin-top:.6rem;text-align:center;font-size:1.8rem;font-weight:900;color:var(--neon-cyan);text-shadow:0 0 15px rgba(0,240,255,.5)" id="modelScore0">+0 pts</div>
+      </div>
+      <div class="eval-side" data-side="1" style="padding:1rem;border-radius:14px;background:rgba(255,45,149,.06);border:1px solid rgba(255,45,149,.3)">
+        <div style="font-weight:800;color:var(--p2);margin-bottom:.4rem" id="evName1">—</div>
+        <p id="evAns1" style="background:rgba(0,0,0,.3);padding:.6rem;border-radius:10px;line-height:1.4;min-height:60px;font-size:.92rem"></p>
+        <p id="evCom1" style="opacity:.95;font-size:.92rem;line-height:1.5;margin-top:.6rem;white-space:pre-wrap;background:rgba(0,0,0,.25);padding:.7rem;border-radius:10px"></p>
+        <div class="model-score" style="margin-top:.6rem;text-align:center;font-size:1.8rem;font-weight:900;color:var(--neon-pink);text-shadow:0 0 15px rgba(255,45,149,.5)" id="modelScore1">+0 pts</div>
+      </div>
+    </div>
+
+    <details style="margin-top:.8rem"><summary style="cursor:pointer;font-weight:700;color:var(--neon-cyan)">📖 Ver respuesta modelo</summary>
+      <div class="model-answer" id="modelAnswer"></div>
+    </details>
+
+    <p id="scoreInfo" style="opacity:.7;font-size:.85rem;margin-top:.6rem;text-align:center"></p>
+
+    <div class="action-row host-only" style="margin-top:1.2rem">
+      <button class="btn btn-primary" style="font-size:1.05rem;padding:1rem 2rem" onclick="doConfirm()" id="confirmBtn">CONFIRMAR ▶</button>
+    </div>
+    <p class="non-host-msg" style="opacity:.6;text-align:center;margin-top:1rem">Esperando que el host confirme...</p>
+  </div>
+</section>
+
+<!-- END -->
+<section id="endScreen" class="screen hidden">
+  <div class="card winner-card">
+    <div class="crown">👑</div>
+    <div style="opacity:.7;letter-spacing:.3em;text-transform:uppercase">Ganador</div>
+    <div class="winner-name" id="winnerName">—</div>
+    <div style="font-size:1.3rem;margin-bottom:1.5rem" id="finalScore">— vs —</div>
+    <div id="endStats" style="opacity:.8;margin-bottom:1.2rem"></div>
+    <button id="resetBtn" class="btn btn-cyan" onclick="doReset()">🔁 Otra partida</button>
+  </div>
+</section>
+
+<script>
+/* ============ STARS ============ */
+(function(){const w=document.getElementById('stars');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';s.style.animationDelay=(Math.random()*3)+'s';s.style.opacity=(.3+Math.random()*.6);w.appendChild(s);}})();
+
+/* ============ STATE ============ */
+const cli = {
+  ws:null, you:null, isHost:false, state:null,
+  timer:null, timeLeft:0,
+  myName: localStorage.getItem("duelo.name") || "",
+  myId: localStorage.getItem("duelo.id") || null,
+};
+
+/* ============ WS ============ */
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  cli.ws = ws;
+  ws.onopen = () => {
+    setConn(true);
+    if (cli.myName) {
+      ws.send(JSON.stringify({ type:"hello", name: cli.myName, id: cli.myId }));
+      showScreen("lobbyScreen");
+    } else {
+      showScreen("joinScreen");
+    }
+  };
+  ws.onclose = () => { setConn(false); setTimeout(connect, 1500); };
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    handleMessage(m);
+  };
+}
+function setConn(ok){
+  const el = document.getElementById('connState');
+  el.className = "conn-state "+(ok?"ok":"bad");
+  el.textContent = ok ? "● Conectado" : "● Sin conexión";
+}
+function send(o){ if(cli.ws && cli.ws.readyState===1) cli.ws.send(JSON.stringify(o)); }
+
+function handleMessage(m) {
+  if (m.type === "welcome") {
+    cli.you = m.you; cli.isHost = m.isHost;
+    localStorage.setItem("duelo.id", cli.you);
+    return;
+  }
+  if (m.type === "error") { alert(m.msg); return; }
+  if (m.type === "state") {
+    cli.state = m;
+    renderState();
+  }
+}
+
+function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+/* ============ JOIN / LOBBY ============ */
+function doJoin() {
+  const name = document.getElementById('joinName').value.trim();
+  if (!name) return alert("Pon un nombre");
+  cli.myName = name;
+  localStorage.setItem("duelo.name", name);
+  send({ type:"hello", name, id: cli.myId });
+}
+function doStart() {
+  const rounds = parseInt(document.getElementById('rounds').value);
+  const timeLimit = parseInt(document.getElementById('timelimit').value);
+  send({ type:"start", rounds, timeLimit });
+}
+function doSkip(){ if(confirm("¿Saltar pregunta? Ambos pierden los puntos.")) send({type:"skip"}); }
+function doSubmit() {
+  if (cli.submitted) return;
+  const text = document.getElementById('textInput').value.trim();
+  cli.submitted = true;
+  send({ type:"submit", text });
+}
+function timeoutSubmit() {
+  if (cli.submitted) return;
+  const text = document.getElementById('textInput').value.trim();
+  cli.submitted = true;
+  send({ type:"submit", text });
+}
+function doConfirm(){ send({ type:"confirm" }); }
+function doReset(){ send({ type:"reset" }); }
+
+/* ============ SCREEN ROUTING ============ */
+function showScreen(id) {
+  for (const s of document.querySelectorAll('section.screen')) s.classList.add('hidden');
+  document.getElementById(id).classList.remove('hidden');
+}
+
+/* ============ RENDER ============ */
+function renderState() {
+  const s = cli.state;
+  if (!s) return;
+
+  // lobby
+  if (s.phase === "lobby") {
+    showScreen("lobbyScreen");
+    renderLobby(s);
+    return;
+  }
+  // end
+  if (s.phase === "end") {
+    showScreen("endScreen");
+    renderEnd(s);
+    return;
+  }
+  // game / eval
+  if (s.phase === "answer") {
+    showScreen("gameScreen");
+    renderGame(s);
+    return;
+  }
+  if (s.phase === "eval") {
+    showScreen("evalScreen");
+    renderEval(s);
+    return;
+  }
+}
+
+function renderLobby(s) {
+  const aiLabels = { claude:"Eval: Claude (semántica)", gemini:"Eval: Gemini (gratis · semántica)", local:"Eval: local (sinónimos)" };
+  document.getElementById('lobbyAi').textContent = aiLabels[s.aiProvider] || aiLabels.local;
+  const wrap = document.getElementById('lobbyPlayers');
+  wrap.innerHTML = "";
+  for (let i = 0; i < 2; i++) {
+    const p = s.players[i];
+    const row = document.createElement('div');
+    if (p) {
+      row.className = `player-row p${i+1}`;
+      const init = (p.name[0]||"?").toUpperCase();
+      const isYou = p.id === cli.you;
+      const isHost = p.id === s.hostId;
+      row.innerHTML = `
+        <div class="avatar">${init}</div>
+        <div style="flex:1">
+          <div style="font-weight:700">${escapeHtml(p.name)} ${isYou?'<span class="you-tag">TÚ</span>':''} ${isHost?'<span style="font-size:.75rem;opacity:.7">👑 host</span>':''}</div>
+          <div style="opacity:.6;font-size:.8rem">${p.connected?'En línea':'Desconectado'}</div>
+        </div>
+        <div class="status-dot ${p.connected?'':'off'}"></div>`;
+    } else {
+      row.className = "player-row empty";
+      row.innerHTML = `<div class="avatar" style="background:rgba(255,255,255,.05);color:#666">?</div><div style="flex:1;opacity:.6">Esperando jugador…</div>`;
+    }
+    wrap.appendChild(row);
+  }
+  const hostCtrl = document.getElementById('hostControls');
+  const waiting = document.getElementById('waitingMsg');
+  if (cli.isHost) {
+    hostCtrl.classList.remove('hidden');
+    const startBtn = document.getElementById('startBtn');
+    startBtn.disabled = s.players.length !== 2 || !s.players.every(p=>p.connected);
+    waiting.textContent = s.players.length < 2 ? "Comparte la URL con tu rival. Pulsa EMPEZAR cuando esté conectado." : "";
+  } else {
+    hostCtrl.classList.add('hidden');
+    waiting.textContent = "Esperando a que el host empiece la partida…";
+  }
+}
+
+function renderGame(s) {
+  const roundNum = s.turnIndex + 1;
+  document.getElementById('roundInfo').textContent = `Ronda ${roundNum} / ${s.rounds}`;
+  document.getElementById('progressFill').style.width = (s.turnIndex/s.rounds*100)+"%";
+
+  const p1 = s.players[0], p2 = s.players[1];
+  if (p1) {
+    document.getElementById('pname1').textContent = p1.name;
+    document.getElementById('av1').textContent = p1.name[0].toUpperCase();
+    document.getElementById('pscore1').textContent = p1.score;
+    document.getElementById('youtag1').classList.toggle('hidden', p1.id !== cli.you);
+  }
+  if (p2) {
+    document.getElementById('pname2').textContent = p2.name;
+    document.getElementById('av2').textContent = p2.name[0].toUpperCase();
+    document.getElementById('pscore2').textContent = p2.score;
+    document.getElementById('youtag2').classList.toggle('hidden', p2.id !== cli.you);
+  }
+  // Highlight submitted players
+  document.getElementById('pcard1').classList.toggle('active', !!s.submissions?.[p1?.id]);
+  document.getElementById('pcard2').classList.toggle('active', !!s.submissions?.[p2?.id]);
+
+  if (s.currentEvent) {
+    const eb = document.getElementById('eventBanner');
+    eb.className = 'event-banner '+s.currentEvent.cls;
+    document.getElementById('eventIcon').textContent = s.currentEvent.icon;
+    document.getElementById('eventTitle').textContent = s.currentEvent.title;
+    document.getElementById('eventDesc').textContent = s.currentEvent.desc;
+    eb.classList.remove('hidden');
+  }
+
+  const tb = document.getElementById('turnBanner');
+  if (s.evaluating) { tb.textContent = "🤖 Evaluando con IA..."; tb.className = 'turn-banner'; }
+  else if (cli.submitted) { tb.textContent = "✓ Respuesta enviada"; tb.className = 'turn-banner p1'; }
+  else { tb.textContent = "Ambos responden a la vez"; tb.className = 'turn-banner'; }
+
+  if (s.currentQ) {
+    document.getElementById('qunit').textContent = s.currentQ.unit;
+    document.getElementById('qid').textContent = `Pregunta ${s.currentQ.id}`;
+    const base = s.currentQ.points;
+    const shown = s.currentMods?.hidden ? "??" : Math.round(base*(s.currentMods?.mult||1));
+    document.getElementById('qpoints').textContent = `+${shown} pts`;
+    document.getElementById('qtext').textContent = s.currentQ.q;
+  }
+
+  // Reset on new round
+  if (cli._lastTurnIdx !== s.turnIndex) {
+    cli.submitted = false;
+    document.getElementById('textInput').value = "";
+    clearInterval(cli.timer);
+    cli.timer = null;
+    cli._timerSeconds = null;
+    cli._lastTurnIdx = s.turnIndex;
+  }
+
+  const canAnswer = !cli.submitted;
+  document.getElementById('textInput').classList.toggle('hidden', !canAnswer);
+  document.getElementById('finishBtn').classList.toggle('hidden', !canAnswer);
+  document.getElementById('skipBtn').classList.toggle('hidden', !cli.isHost);
+
+  // Rival status
+  const me = s.players.find(p => p.id === cli.you);
+  const rival = s.players.find(p => p.id !== cli.you);
+  const rs = document.getElementById('rivalStatus');
+  if (rival) {
+    const rivalDone = !!s.submissions?.[rival.id];
+    const meDone = !!s.submissions?.[me?.id];
+    if (s.evaluating) rs.textContent = "🤖 IA evaluando ambas respuestas...";
+    else if (meDone && rivalDone) rs.textContent = "Esperando IA...";
+    else if (meDone) rs.textContent = `Esperando a ${rival.name}...`;
+    else if (rivalDone) rs.textContent = `${rival.name} ya terminó. ¡Date prisa!`;
+    else rs.textContent = `${rival.name} está respondiendo...`;
+  } else rs.textContent = "";
+
+  if (canAnswer) {
+    if (document.activeElement !== document.getElementById('textInput')) {
+      document.getElementById('textInput').focus();
+    }
+    const deadline = s.roundDeadline ? s.roundDeadline - (s.serverNow - Date.now()) : null;
+    startTimer(s.timeLimit + (s.currentMods?.timeBonus||0), deadline);
+  } else {
+    clearInterval(cli.timer);
+    cli.timer = null;
+  }
+}
+
+function renderEval(s) {
+  const q = s.currentQ;
+  document.getElementById('evalQuestion').textContent = q.q;
+  const tag = document.getElementById('evalSrcTag');
+  const src = s.evalResult?.source || "local";
+  const tagMap = { claude:{cls:'claude',txt:'CLAUDE AI · PDF'}, gemini:{cls:'gemini',txt:'GEMINI AI · PDF'}, local:{cls:'local',txt:'LOCAL'} };
+  const t = tagMap[src] || tagMap.local;
+  tag.className = 'source-tag '+t.cls;
+  tag.textContent = t.txt;
+
+  for (let i = 0; i < 2; i++) {
+    const p = s.players[i];
+    const r = s.evalResult?.[`p${i}`];
+    document.getElementById(`evName${i}`).textContent = p?.name || `Jugador ${i+1}`;
+    document.getElementById(`evAns${i}`).textContent = s.submissionsText?.[p?.id] || "(sin respuesta)";
+    document.getElementById(`evCom${i}`).textContent = r?.comment || "";
+    const pts = s.proposedScores?.[i] ?? 0;
+    const pct = r?.score ?? 0;
+    document.getElementById(`modelScore${i}`).textContent = `+${pts} pts (${pct}/100)`;
+  }
+
+  document.getElementById('modelAnswer').innerHTML = MODELS[q.id] || "(no disponible)";
+
+  let info = `Nota IA: ${s.players[0]?.name||'J1'}: ${s.evalResult?.p0?.score ?? 0}/100 · ${s.players[1]?.name||'J2'}: ${s.evalResult?.p1?.score ?? 0}/100 · base ${q.points} pts`;
+  if (s.currentMods?.mult && s.currentMods.mult !== 1) info += ` · ×${s.currentMods.mult.toFixed(2)}`;
+  document.getElementById('scoreInfo').textContent = info;
+
+  // Host-only controls
+  document.querySelectorAll('.host-only').forEach(el => el.style.display = cli.isHost ? '' : 'none');
+  document.querySelectorAll('.non-host-msg').forEach(el => el.style.display = cli.isHost ? 'none' : '');
+}
+
+function renderEnd(s) {
+  const [p1, p2] = s.players;
+  let winnerName = "EMPATE 🤝", color = "#fff";
+  if (p1.score > p2.score) { winnerName = p1.name + " 🏆"; color = "var(--neon-cyan)"; }
+  else if (p2.score > p1.score) { winnerName = p2.name + " 🏆"; color = "var(--neon-pink)"; }
+  const wn = document.getElementById('winnerName');
+  wn.textContent = winnerName;
+  wn.style.color = color;
+  wn.style.textShadow = `0 0 30px ${color}`;
+  document.getElementById('finalScore').textContent = `${p1.name}: ${p1.score} · ${p2.name}: ${p2.score}`;
+  document.getElementById('endStats').textContent = `Diferencia: ${Math.abs(p1.score-p2.score)} pts · ${s.rounds} rondas`;
+  document.getElementById('resetBtn').classList.toggle('hidden', !cli.isHost);
+}
+
+/* ============ TIMER ============ */
+function startTimer(seconds, deadlineMs) {
+  if (cli.timer) return;
+  cli._deadline = deadlineMs || (Date.now() + seconds * 1000);
+  cli.timeLeft = Math.max(0, Math.round((cli._deadline - Date.now()) / 1000));
+  updateTimerUI();
+  cli.timer = setInterval(() => {
+    cli.timeLeft = Math.max(0, Math.round((cli._deadline - Date.now()) / 1000));
+    updateTimerUI();
+    if (cli.timeLeft <= 0) {
+      clearInterval(cli.timer);
+      cli.timer = null;
+      timeoutSubmit();
+    }
+  }, 250);
+}
+function updateTimerUI(){
+  const t = document.getElementById('timer');
+  t.textContent = Math.max(0, cli.timeLeft);
+  t.classList.toggle('warn', cli.timeLeft<=20 && cli.timeLeft>10);
+  t.classList.toggle('danger', cli.timeLeft<=10);
+}
+
+/* ============ MODELS DICT (respuesta modelo por id) ============
+   El server no envía 'model' por mensaje; lo mantenemos aquí.
+*/
+const MODELS = {
+  1:"<b>Empresa:</b> entidad de personas, aspiraciones, bienes materiales y capacidades técnicas y financieras. Produce/transforma productos o presta servicios para satisfacer necesidades y deseos con finalidad de obtener utilidad o beneficio.<br><br><b>Empresa Digital:</b> usa intensamente las TIC para competir, diferenciarse, liderar, vender más, ser más eficiente y llegar a nuevos mercados.",
+  2:"<b>Cadena de valor:</b> eslabones de actividades que añaden valor al producto. Desagregar permite identificar fortalezas, debilidades, ventajas competitivas y costes. Va desde diseño hasta postventa.<br><br>Tipos: <b>Primarias (de línea)</b> y <b>De apoyo (soporte)</b>.",
+  3:"Cuatro estrategias:<br>• <b>Defensiva</b>: enfrentar amenazas, resaltar diferencia.<br>• <b>Ofensiva</b>: crecer, atacar a la competencia.<br>• <b>Supervivencia</b>: amenazas externas sin fuerzas internas; esperar.<br>• <b>Reorientación</b>: oportunidades sin preparación; cambiar política/producto.",
+  4:"<b>Lienzo:</b> 9 módulos que reflejan la lógica de ingresos. Cubren 4 áreas: clientes, oferta, infraestructura, viabilidad económica.<br>Beneficios: <b>práctico</b> (modificable), <b>intuitivo</b> (post-its), <b>equipo</b> (visible), <b>visual</b> (vistazo global).",
+  5:"<b>Actividades clave</b> — Producción (Tesla), Resolución de problemas (consultoría), Plataforma/red (Airbnb, Spotify, Blablacar).<br><br><b>Asociaciones clave</b> — alianzas con terceros para optimizar el modelo, reducir riesgos o adquirir recursos. Proveedores y socios clave.",
+  6:"• <b>Larga cola:</b> vender menos de más, amplia gama de especializados con poco volumen individual.<br>• <b>Multilaterales:</b> dos o más grupos de clientes interdependientes.<br>• <b>Gratis:</b> un segmento se beneficia constantemente sin coste.<br>• <b>Abierto:</b> crear y captar valor mediante colaboración sistemática con socios externos.",
+  7:"<b>Mapa Valor (DISEÑAR) + Segmento Cliente (OBSERVAR)</b>.<br>Cliente: Jobs (lo que quiere hacer), Gains (positivos), Pains (negativos).<br>Mapa: Productos/servicios (tangibles/intangibles), Gain creators, Pain relievers. Encaje por relevancia.",
+  8:"Cinco grupos:<br>• Innovators (entusiastas).<br>• Early Adopters (visionarios).<br>• Early Majority (pragmáticos).<br>• Late Majority (conservadores).<br>• Laggards (escépticos).",
+  9:"Utilidad percibida de las ventajas vs costes totales, considerando alternativas competitivas y contexto. Lo definen los clientes, es opaco, depende del contexto, varias dimensiones (funcional/emocional/económica), compromiso beneficios-costes, es relativo.",
+  10:"Identificar PROBLEMAS (no soluciones), en palabras del cliente, jerárquicos, priorizados por importancia y satisfacción actual.<br>Técnicas: <b>Entrevistas en profundidad</b> y <b>Diseño empático</b> (las tradicionales se quedan en superficie).",
+  11:"<b>Personas:</b> arquetipos de comprador/usuario. Se caracterizan por: información personal (nombre/foto/frase), perfil sociodemográfico, situación/puesto actual, objetivos (sentirse/hacer/ser), comportamientos y actitudes.",
+  12:"Dividir mercado en grupos similares. Bueno: homogéneo, medible, sostenible, accesible, accionable.<br>B2C: demográficos, comportamiento, psicográficos.<br>B2B: firmográficos, enfoques de compra, personales.",
+  13:"• TAM: mercado total potencial (100%).<br>• SAM: parte del TAM según nuestra estrategia/modelo.<br>• SOM: lo realista que podemos vender (recursos, competidores, tiempo).",
+  14:"Lugar distintivo en la mente/corazón del cliente frente a alternativas. Define percepciones a cambiar, énfasis en marco competitivo y diferenciadores desde la perspectiva del cliente. <b>Posicionamiento:</b> diseñar oferta e imagen para alcanzar esa posición.",
+  15:"<b>Outbound:</b> interrumpir; medios pagados; display, SPAM, puerta fría.<br><b>Inbound:</b> atraer y conseguir permiso; medios ganados/propios; SEO, sociales, intención, contenido valioso.",
+  16:"<b>POST:</b> People (actividades de clientes), Objectives + Metrics (qué y cómo medir), Strategy (cambiar relaciones), Technology (qué tecnologías sociales).",
+  17:"<b>Kotler:</b> propiedad (privada/pública) × objetivos (ánimo de lucro / sin ánimo). Empresas, empresas públicas, ONG, administraciones.<br><br><b>Hernangómez:</b> actividades (económicas/no económicas) × objetivos (económicos/no económicos). Empresas, servicios públicos, compañías de teatro, partidos/iglesia/ejército.",
+  18:"<b>Actividades primarias / de línea:</b><br>• Logística interior (entrada).<br>• Operaciones.<br>• Logística exterior (salida).<br>• Marketing y ventas.<br>• Servicios (postventa).<br><br>Generan directamente el <b>margen de utilidad</b>.",
+  19:"<b>Actividades de soporte/apoyo:</b><br>• Infraestructura de la organización (planificación, contabilidad, finanzas).<br>• Dirección de recursos humanos (búsqueda, contratación, motivación).<br>• Desarrollo de tecnología / I+D.<br>• Aprovisionamiento (almacenaje, materiales, insumos).",
+  20:"<b>DAFO</b> (Debilidades, Amenazas, Fortalezas, Oportunidades): herramienta para estudiar la situación de una empresa/proyecto/persona.<br><br>• <b>Análisis interno:</b> Debilidades y Fortalezas.<br>• <b>Análisis externo:</b> Amenazas y Oportunidades.<br><br>Objetivo: determinar ventajas competitivas y la estrategia genérica más adecuada.",
+  21:"<b>Análisis interno:</b> detectar fortalezas y debilidades que originen ventajas/desventajas competitivas.<br><br>Factores: <b>Producción</b> (capacidad, costes, calidad, innovación), <b>Marketing</b> (productos, imagen, precios, publicidad, distribución), <b>Organización</b> (estructura, dirección, cultura), <b>Personal</b> (selección, formación, motivación), <b>Finanzas</b> (recursos, endeudamiento, rentabilidad, I+D).",
+  22:"<b>Análisis externo:</b> identificar amenazas y oportunidades del mercado.<br><br>Áreas: <b>Mercado</b> (tamaño, segmento, demanda), <b>Sector</b> (tendencias, fabricantes, proveedores, distribuidores), <b>Competencia</b> (actual y potencial), <b>Entorno</b> (factores no controlables: económicos, políticos, legales, sociológicos, tecnológicos).",
+  23:"Un <b>modelo de negocio</b> describe las bases sobre las que una empresa <b>crea, proporciona y capta valor</b>.<br><br>Es un <b>anteproyecto</b> de una estrategia, NO un plan detallado. Refleja la lógica para conseguir ingresos.",
+  24:"<b>Propuestas de valor:</b> productos/servicios que la empresa ofrece a los segmentos para tratar de satisfacerlos.<br><br>Razón por la que el cliente elige una empresa frente a otra. Cuantitativa (precio, velocidad) o cualitativa (diseño, novedad, comodidad, marca, status, personalización).",
+  25:"<b>Canales:</b> medios por los que la empresa hace llegar la propuesta de valor a los segmentos de mercado y establece contacto con sus clientes.<br><br>Preguntas: ¿qué medios prefieren? ¿usar todos para todas las relaciones? ¿igual con todos los segmentos? ¿coste y rentabilidad?",
+  26:"Tipologías de <b>relación con clientes</b>:<br>• <b>Autoservicio:</b> 100% cliente (cajeros automáticos).<br>• <b>Servicios automáticos:</b> tecnología sofisticada (Alexa, Echo, bots).<br>• <b>Asistencia personal:</b> personas dedicadas (call centers).<br><br>Espectro de 100% automatizado a 100% personal.",
+  27:"<b>Fuentes de ingresos:</b> se generan cuando los clientes adquieren los productos/servicios (venta, suscripción, alquiler, licencia, comisión, publicidad).<br><br><b>Estructura de costes:</b> principales costes que el modelo genera para su funcionamiento (fijos/variables, con o sin economías de escala).",
+  28:"<b>Recursos clave:</b> activos principales que dan soporte al resto de módulos (físicos, intelectuales — marca/patentes —, humanos, financieros).<br><br><b>Segmentos de mercado:</b> grupos de clientes a los que la empresa se dirige, con necesidades y comportamientos similares.",
+  29:"<b>Desagregación:</b> separar modelos en entidades independientes para evitar conflictos o renuncias.<br><br>Tres ejes:<br>• <b>Relación con el cliente:</b> fidelizar, ser <i>love Brand</i>.<br>• <b>Innovación del producto/servicio:</b> ser primero en llegar al mercado.<br>• <b>Infraestructuras:</b> gestionar instalaciones, plataformas, servidores.<br><br>Pueden coexistir (Amazon: retail, AWS, Prime) pero idealmente desagregados.",
+  30:"<b>Freemium:</b> lo básico es gratis, los extras tienen precio (versión premium).<br><br>Variante del modelo <b>Gratis</b>: usuarios premium financian el servicio gratuito para todos. Coste marginal bajo + masa de usuarios free → fracción que paga.<br><br>Ejemplos: Spotify, Dropbox, Candy Crush, LinkedIn.",
+  31:"<b>Modelos abiertos:</b> crear y captar valor mediante colaboración sistemática con socios externos.<br><br>• <b>De fuera adentro:</b> aprovechar ideas externas para innovar.<br>• <b>De dentro afuera:</b> proporcionar a terceros ideas/activos no usados internamente.<br><br>Ejemplo: software libre — adaptar código abierto + liberar mejoras = <b>innovación abierta</b>.",
+  32:"Sesgos cognitivos que hacen al humano irracional:<br>• Las decisiones se toman <b>en relación con una referencia</b>.<br>• Difícil asignar <b>valor monetario</b>.<br>• <b>Efecto Dotación:</b> valor exagerado a lo que poseemos.<br>• <b>Aversión a la pérdida:</b> no soportamos perder.<br>• <b>Expectativas modifican experiencias</b>.<br>• <b>¡GRATIS!</b> tiene atractivo irresistible.<br>• <b>Inconsistencia temporal:</b> inmediato vs futuro.",
+  33:"<b>Innovaciones continuas</b> (incrementales): mejoras pequeñas. Ejemplo: detergente mejorado.<br><b>Innovaciones discontinuas</b> (radicales): cambio profundo. Ejemplo: coche de hidrógeno.<br><br>Tradicionalmente INNOVACIÓN = DISCONTINUIDAD.<br><br>Desde el punto de vista comercial:<br>• <b>Acelerador:</b> beneficios de adoptarla.<br>• <b>Freno:</b> costes de adoptarla.",
+  34:"Cinco factores de <b>Rogers</b> para adopción fácil:<br>• <b>Ventaja relativa (+):</b> más beneficios o menos costes que alternativas.<br>• <b>Compatibilidad (+):</b> con valores, prácticas, infraestructuras.<br>• <b>Complejidad (−):</b> cuanto más simple, mejor.<br>• <b>Facilidad de prueba (+):</b> cuanto más fácil de probar, mejor.<br>• <b>Observabilidad (+):</b> uso y resultados visibles.",
+  35:"Tres dimensiones del valor:<br>• <b>Funcional (la razón):</b> ¿qué permite hacer? ¿Es eficaz?<br>• <b>Emocional (el corazón):</b> ¿cómo me hace sentir? ¿Seguro, valorado, respetado?<br>• <b>Económico (la cartera):</b> ¿recursos, tiempo, dinero? ¿Más eficiente, más barato?<br><br>Es multidimensional, con alto componente <b>emocional</b>. Lo definen las <b>percepciones</b> del cliente.",
+};
+
+/* ============ TEXT INPUT EVENTS ============ */
+document.getElementById('textInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    doSubmit();
+  }
+});
+
+connect();
+</script>
+</body>
+</html>
